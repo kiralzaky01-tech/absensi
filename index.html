@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Absensi Siswa</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="container wide">
+        <header class="page-header">
+            <div>
+                <p class="eyebrow">SISTEM INFORMASI SEKOLAH</p>
+                <h1>Absensi Siswa</h1>
+                <p class="subtitle">Catat dan pantau kehadiran siswa dengan mudah.</p>
+            </div>
+
+            <button type="button" id="btnLogout" class="btn-logout">
+                Keluar
+            </button>
+        </header>
+
+        <section class="card">
+            <div class="card-heading">
+                <h2>Form Absensi</h2>
+                <p>Lengkapi data siswa sebelum menyimpan absensi.</p>
+            </div>
+
+            <form id="absensiForm">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="inputNama">Nama Siswa</label>
+                        <input
+                            type="text"
+                            id="inputNama"
+                            placeholder="Masukkan nama siswa"
+                            autocomplete="name"
+                            required
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="inputKelas">Kelas</label>
+                        <input
+                            type="text"
+                            id="inputKelas"
+                            placeholder="Contoh: X RPL 1"
+                            required
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="inputTanggal">Tanggal Absensi</label>
+                        <input
+                            type="date"
+                            id="inputTanggal"
+                            required
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="inputStatus">Status Kehadiran</label>
+                        <select id="inputStatus" required>
+                            <option value="">Pilih status kehadiran</option>
+                            <option value="Hadir">Hadir</option>
+                            <option value="Izin">Izin</option>
+                            <option value="Sakit">Sakit</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="pesanAbsensi" class="message" hidden></div>
+
+                <button type="submit" id="btnAbsen" class="btn-primary">
+                    Simpan Absensi
+                </button>
+            </form>
+        </section>
+
+        <section class="card">
+            <div class="card-heading">
+                <h2>Riwayat Absensi</h2>
+                <p>Daftar absensi yang telah kamu simpan.</p>
+            </div>
+
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>No.</th>
+                            <th>Tanggal</th>
+                            <th>Nama Siswa</th>
+                            <th>Kelas</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="riwayatAbsensi">
+                        <tr>
+                            <td colspan="5" class="empty-state">
+                                Memuat riwayat absensi...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
+
+        import {
+            getAuth,
+            onAuthStateChanged,
+            signOut
+        } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js";
+
+        import {
+            getFirestore,
+            doc,
+            getDoc,
+            setDoc,
+            collection,
+            query,
+            where,
+            getDocs,
+            serverTimestamp
+        } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyADNAfsIwOWcKeI8-2bSIHnTKY73B_aJbU",
+            authDomain: "tugas-1a.firebaseapp.com",
+            projectId: "tugas-1a",
+            storageBucket: "tugas-1a.firebasestorage.app",
+            messagingSenderId: "944250444828",
+            appId: "1:944250444828:web:4ba57f60df3086c18553d9",
+            measurementId: "G-6YXK4DVXL9"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        const form = document.getElementById("absensiForm");
+        const inputNama = document.getElementById("inputNama");
+        const inputKelas = document.getElementById("inputKelas");
+        const inputTanggal = document.getElementById("inputTanggal");
+        const inputStatus = document.getElementById("inputStatus");
+        const btnAbsen = document.getElementById("btnAbsen");
+        const btnLogout = document.getElementById("btnLogout");
+        const pesanAbsensi = document.getElementById("pesanAbsensi");
+        const riwayatAbsensi = document.getElementById("riwayatAbsensi");
+
+        let penggunaAktif = null;
+
+        function tanggalHariIni() {
+            const sekarang = new Date();
+            const tahun = sekarang.getFullYear();
+            const bulan = String(sekarang.getMonth() + 1).padStart(2, "0");
+            const tanggal = String(sekarang.getDate()).padStart(2, "0");
+
+            return `${tahun}-${bulan}-${tanggal}`;
+        }
+
+        inputTanggal.value = tanggalHariIni();
+
+        function tampilPesan(pesan, berhasil = false) {
+            pesanAbsensi.textContent = pesan;
+            pesanAbsensi.hidden = false;
+            pesanAbsensi.className = berhasil
+                ? "message success"
+                : "message error";
+        }
+
+        function sembunyikanPesan() {
+            pesanAbsensi.hidden = true;
+            pesanAbsensi.textContent = "";
+        }
+
+        function tampilkanStatus(status) {
+            const span = document.createElement("span");
+            span.className = "status-badge";
+
+            if (status === "Hadir") {
+                span.classList.add("status-hadir");
+            } else if (status === "Izin") {
+                span.classList.add("status-izin");
+            } else {
+                span.classList.add("status-sakit");
+            }
+
+            span.textContent = status;
+            return span;
+        }
+
+        async function muatProfil(user) {
+            const refProfil = doc(db, "users", user.uid);
+            const snapshot = await getDoc(refProfil);
+
+            if (snapshot.exists()) {
+                const profil = snapshot.data();
+
+                inputNama.value = profil.nama || user.displayName || "";
+                inputKelas.value = profil.kelas || "";
+            } else {
+                inputNama.value = user.displayName || "";
+                inputKelas.value = "";
+            }
+
+            if (!inputNama.value && user.email) {
+                inputNama.value = user.email.split("@")[0];
+            }
+        }
+
+        async function muatRiwayat() {
+            if (!penggunaAktif) return;
+
+            riwayatAbsensi.innerHTML = `
+                <tr>
+                    <td colspan="5" class="empty-state">
+                        Memuat riwayat absensi...
+                    </td>
+                </tr>
+            `;
+
+            try {
+                const refKoleksi = collection(db, "absensi");
+                const q = query(
+                    refKoleksi,
+                    where("uid", "==", penggunaAktif.uid)
+                );
+
+                const hasil = await getDocs(q);
+                const daftar = [];
+
+                hasil.forEach((dokumen) => {
+                    daftar.push(dokumen.data());
+                });
+
+                daftar.sort((a, b) => {
+                    return String(b.tanggal || "").localeCompare(
+                        String(a.tanggal || "")
+                    );
+                });
+
+                riwayatAbsensi.innerHTML = "";
+
+                if (daftar.length === 0) {
+                    riwayatAbsensi.innerHTML = `
+                        <tr>
+                            <td colspan="5" class="empty-state">
+                                Belum ada riwayat absensi.
+                            </td>
+                        </tr>
+                    `;
+                    return;
+                }
+
+                daftar.forEach((item, index) => {
+                    const baris = document.createElement("tr");
+
+                    const data = [
+                        index + 1,
+                        item.tanggal || "-",
+                        item.nama || "-",
+                        item.kelas || "-",
+                        null
+                    ];
+
+                    for (let i = 0; i < 4; i++) {
+                        const sel = document.createElement("td");
+                        sel.textContent = data[i];
+                        baris.appendChild(sel);
+                    }
+
+                    const selStatus = document.createElement("td");
+                    selStatus.appendChild(
+                        tampilkanStatus(item.status || "-")
+                    );
+                    baris.appendChild(selStatus);
+
+                    riwayatAbsensi.appendChild(baris);
+                });
+            } catch (error) {
+                console.error("Gagal memuat riwayat:", error);
+
+                riwayatAbsensi.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="empty-state">
+                            Riwayat gagal dimuat. Periksa koneksi dan aturan Firestore.
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+
+        onAuthStateChanged(auth, async (user) => {
+            if (!user) {
+                window.location.href = "login.html";
+                return;
+            }
+
+            penggunaAktif = user;
+            btnAbsen.disabled = true;
+
+            try {
+                await muatProfil(user);
+                await muatRiwayat();
+                btnAbsen.disabled = false;
+            } catch (error) {
+                console.error("Gagal memuat data:", error);
+                tampilPesan(
+                    "Gagal memuat data. Periksa koneksi atau aturan Firestore."
+                );
+                btnAbsen.disabled = false;
+            }
+        });
+
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            sembunyikanPesan();
+
+            if (!penggunaAktif) {
+                tampilPesan("Silakan login terlebih dahulu.");
+                return;
+            }
+
+            const nama = inputNama.value.trim();
+            const kelas = inputKelas.value.trim();
+            const tanggal = inputTanggal.value;
+            const status = inputStatus.value;
+
+            if (!nama || !kelas || !tanggal || !status) {
+                tampilPesan("Semua kolom wajib diisi.");
+                return;
+            }
+
+            if (!["Hadir", "Izin", "Sakit"].includes(status)) {
+                tampilPesan("Status kehadiran tidak valid.");
+                return;
+            }
+
+            btnAbsen.disabled = true;
+            btnAbsen.textContent = "Menyimpan...";
+
+            try {
+                const idAbsensi = `${penggunaAktif.uid}_${tanggal}`;
+                const refAbsensi = doc(db, "absensi", idAbsensi);
+
+                const snapshot = await getDoc(refAbsensi);
+
+                if (snapshot.exists()) {
+                    tampilPesan(
+                        "Absensi untuk tanggal tersebut sudah tersimpan."
+                    );
+                    return;
+                }
+
+                await setDoc(refAbsensi, {
+                    uid: penggunaAktif.uid,
+                    nama: nama,
+                    kelas: kelas,
+                    tanggal: tanggal,
+                    status: status,
+                    createdAt: serverTimestamp()
+                });
+
+                tampilPesan("Absensi berhasil disimpan!", true);
+
+                inputStatus.value = "";
+                inputTanggal.value = tanggalHariIni();
+
+                await muatRiwayat();
+            } catch (error) {
+                console.error("Gagal menyimpan absensi:", error);
+
+                if (error.code === "permission-denied") {
+                    tampilPesan(
+                        "Akses ditolak oleh Firestore. Periksa Firestore Security Rules."
+                    );
+                } else {
+                    tampilPesan(
+                        "Absensi gagal disimpan. Periksa koneksi dan konfigurasi Firebase."
+                    );
+                }
+            } finally {
+                btnAbsen.disabled = false;
+                btnAbsen.textContent = "Simpan Absensi";
+            }
+        });
+
+        btnLogout.addEventListener("click", async () => {
+            try {
+                await signOut(auth);
+                window.location.href = "login.html";
+            } catch (error) {
+                console.error("Gagal keluar:", error);
+                tampilPesan("Gagal logout. Silakan coba lagi.");
+            }
+        });
+    </script>
+
+</body>
+</html>

@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registrasi Siswa</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h2>Registrasi Siswa</h2>
+        <p class="subtitle">Buat akun sistem absensi</p>
+
+        <form id="registerForm">
+            <label for="nama">Nama Lengkap</label>
+            <input
+                id="nama"
+                type="text"
+                placeholder="Masukkan nama lengkap"
+                autocomplete="name"
+                required
+            >
+
+            <label for="email">Email</label>
+            <input
+                id="email"
+                type="email"
+                placeholder="Masukkan email"
+                autocomplete="email"
+                required
+            >
+
+            <label for="password">Password</label>
+            <input
+                id="password"
+                type="password"
+                placeholder="Minimal 6 karakter"
+                minlength="6"
+                autocomplete="new-password"
+                required
+            >
+
+            <button type="submit" id="btnDaftar">Daftar</button>
+
+            <p id="pesan" class="message" role="status" aria-live="polite"></p>
+        </form>
+
+        <p class="center">
+            Sudah punya akun?
+            <a href="login.html">Login di sini</a>
+        </p>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from
+            "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
+
+        import {
+            getAuth,
+            createUserWithEmailAndPassword
+        } from
+            "https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js";
+
+        import {
+            getFirestore,
+            doc,
+            setDoc,
+            serverTimestamp
+        } from
+            "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyADNAfsIwOWcKeI8-2bSIHnTKY73B_aJbU",
+            authDomain: "tugas-1a.firebaseapp.com",
+            projectId: "tugas-1a",
+            storageBucket: "tugas-1a.firebasestorage.app",
+            messagingSenderId: "944250444828",
+            appId: "1:944250444828:web:4ba57f60df3086c18553d9",
+            measurementId: "G-6YXK4DVXL9"
+          };
+
+        const form = document.getElementById("registerForm");
+        const pesan = document.getElementById("pesan");
+        const tombol = document.getElementById("btnDaftar");
+
+        function tampilkanPesan(teks, berhasil = false) {
+            pesan.textContent = teks;
+            pesan.className = "message " +
+                (berhasil ? "success" : "error");
+        }
+
+        function pesanError(error) {
+            console.error("Firebase error:", error.code, error.message);
+
+            const daftarError = {
+                "auth/email-already-in-use":
+                    "Email sudah terdaftar. Silakan gunakan email lain.",
+                "auth/invalid-email":
+                    "Format email tidak valid.",
+                "auth/weak-password":
+                    "Password terlalu lemah. Gunakan minimal 6 karakter.",
+                "auth/operation-not-allowed":
+                    "Aktifkan metode Email/Password di Firebase Authentication.",
+                "auth/invalid-api-key":
+                    "API Key tidak valid. Periksa konfigurasi Firebase.",
+                "auth/network-request-failed":
+                    "Tidak dapat terhubung ke Firebase. Periksa koneksi internet.",
+                "permission-denied":
+                    "Firestore menolak akses. Periksa Security Rules.",
+                "unavailable":
+                    "Firestore tidak tersedia. Periksa koneksi internet."
+            };
+
+            return daftarError[error.code] ||
+                `${error.code || "Error"}: ${error.message || "Terjadi kesalahan."}`;
+        }
+
+        let auth = null;
+        let db = null;
+
+        try {
+            const app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
+
+            console.log("Firebase berhasil diinisialisasi.");
+        } catch (error) {
+            console.error("Gagal menginisialisasi Firebase:", error);
+            tampilkanPesan(
+                "Firebase gagal dimulai. Periksa konfigurasi dan URL CDN."
+            );
+            tombol.disabled = true;
+        }
+
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+
+            if (!auth || !db) {
+                tampilkanPesan("Firebase belum siap. Periksa konfigurasi.");
+                return;
+            }
+
+            const nama = document.getElementById("nama").value.trim();
+            const email = document.getElementById("email").value.trim();
+            const password = document.getElementById("password").value;
+
+            if (!nama || !email || !password) {
+                tampilkanPesan("Semua kolom wajib diisi.");
+                return;
+            }
+
+            if (password.length < 6) {
+                tampilkanPesan("Password minimal 6 karakter.");
+                return;
+            }
+
+            tombol.disabled = true;
+            tombol.textContent = "Memproses...";
+
+            let akunDibuat = false;
+
+            try {
+                tampilkanPesan("Membuat akun Firebase...");
+
+                const hasil = await createUserWithEmailAndPassword(
+                    auth,
+                    email,
+                    password
+                );
+
+                akunDibuat = true;
+
+                console.log("Akun berhasil dibuat:", hasil.user.uid);
+
+                tampilkanPesan("Akun berhasil dibuat. Menyimpan profil...");
+
+                await setDoc(doc(db, "users", hasil.user.uid), {
+                    uid: hasil.user.uid,
+                    nama: nama,
+                    email: hasil.user.email,
+                    role: "siswa",
+                    createdAt: serverTimestamp()
+                });
+
+                console.log("Profil berhasil disimpan ke Firestore.");
+
+                tampilkanPesan(
+                    "Registrasi berhasil! Data tersimpan di Firebase.",
+                    true
+                );
+
+                form.reset();
+
+                setTimeout(() => {
+                    window.location.href = "login.html";
+                }, 1500);
+
+            } catch (error) {
+                console.error("Registrasi gagal:", error);
+
+                if (akunDibuat) {
+                    tampilkanPesan(
+                        "Akun berhasil dibuat, tetapi profil gagal disimpan. " +
+                        pesanError(error)
+                    );
+                } else {
+                    tampilkanPesan(pesanError(error));
+                }
+            } finally {
+                tombol.disabled = false;
+                tombol.textContent = "Daftar";
+            }
+        });
+    </script>
+</body>
+</html>

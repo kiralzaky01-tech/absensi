@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login Sistem Absensi</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h2>Login Siswa</h2>
+        <p class="subtitle">Sistem Absensi Sekolah</p>
+
+        <form id="loginForm">
+            <label for="email">Email</label>
+            <input id="email" type="email" required autocomplete="email">
+
+            <label for="password">Password</label>
+            <input id="password" type="password" required autocomplete="current-password">
+
+            <button id="btnLogin" type="submit">Login</button>
+            <p id="pesan" class="message" role="status"></p>
+        </form>
+
+        <p class="center">Belum punya akun? <a href="register.html">Daftar</a></p>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from
+            "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
+        import {
+            getAuth,
+            signInWithEmailAndPassword,
+            onAuthStateChanged
+        } from
+            "https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js";
+
+       const firebaseConfig = {
+        apiKey: "AIzaSyADNAfsIwOWcKeI8-2bSIHnTKY73B_aJbU",
+        authDomain: "tugas-1a.firebaseapp.com",
+        projectId: "tugas-1a",
+        storageBucket: "tugas-1a.firebasestorage.app",
+        messagingSenderId: "944250444828",
+        appId: "1:944250444828:web:4ba57f60df3086c18553d9",
+        measurementId: "G-6YXK4DVXL9"
+      };
+
+        const form = document.getElementById("loginForm");
+        const pesan = document.getElementById("pesan");
+        const tombol = document.getElementById("btnLogin");
+
+        function tampil(teks, berhasil = false) {
+            pesan.textContent = teks;
+            pesan.className = "message " + (berhasil ? "success" : "error");
+        }
+
+        let auth;
+
+        try {
+            const app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+
+            // DIUBAH: Pengalihan otomatis jika user sudah login sebelumnya
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    window.location.replace("index.html");
+                }
+            });
+        } catch (error) {
+            console.error(error);
+            tampil("Firebase gagal dimulai. Periksa konfigurasi dan URL CDN.");
+            tombol.disabled = true;
+        }
+
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            if (!auth) return;
+
+            const email = document.getElementById("email").value.trim();
+            const password = document.getElementById("password").value;
+
+            tombol.disabled = true;
+            tampil("Sedang memeriksa akun...");
+
+            try {
+                await signInWithEmailAndPassword(auth, email, password);
+                tampil("Login berhasil.", true);
+                // DIUBAH: Pengalihan setelah klik tombol login sukses
+                window.location.href = "index.html";
+            } catch (error) {
+                console.error(error.code, error.message);
+
+                const daftar = {
+                    "auth/invalid-credential": "Email atau password salah.",
+                    "auth/user-not-found": "Akun tidak ditemukan.",
+                    "auth/wrong-password": "Password salah.",
+                    "auth/invalid-email": "Format email tidak valid.",
+                    "auth/too-many-requests": "Terlalu banyak percobaan. Coba lagi nanti.",
+                    "auth/network-request-failed": "Tidak dapat terhubung ke Firebase."
+                };
+
+                tampil(daftar[error.code] ||
+                    `${error.code || "Error"}: ${error.message || "Login gagal."}`);
+            } finally {
+                tombol.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
