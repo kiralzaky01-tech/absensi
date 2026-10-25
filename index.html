@@ -81,7 +81,7 @@
         <section class="card">
             <div class="card-heading">
                 <h2>Riwayat Absensi</h2>
-                <p>Daftar absensi yang telah kamu simpan.</p>
+                <p>Daftar seluruh absensi yang telah kamu simpan.</p>
             </div>
 
             <div class="table-wrapper">
@@ -108,7 +108,9 @@
     </div>
 
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
+        import {
+            initializeApp
+        } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
 
         import {
             getAuth,
@@ -120,7 +122,7 @@
             getFirestore,
             doc,
             getDoc,
-            setDoc,
+            addDoc,
             collection,
             query,
             where,
@@ -226,6 +228,7 @@
 
             try {
                 const refKoleksi = collection(db, "absensi");
+
                 const q = query(
                     refKoleksi,
                     where("uid", "==", penggunaAktif.uid)
@@ -235,13 +238,25 @@
                 const daftar = [];
 
                 hasil.forEach((dokumen) => {
-                    daftar.push(dokumen.data());
+                    daftar.push({
+                        id: dokumen.id,
+                        ...dokumen.data()
+                    });
                 });
 
                 daftar.sort((a, b) => {
-                    return String(b.tanggal || "").localeCompare(
+                    const perTanggal = String(b.tanggal || "").localeCompare(
                         String(a.tanggal || "")
                     );
+
+                    if (perTanggal !== 0) {
+                        return perTanggal;
+                    }
+
+                    const waktuA = a.createdAt?.toMillis?.() || 0;
+                    const waktuB = b.createdAt?.toMillis?.() || 0;
+
+                    return waktuB - waktuA;
                 });
 
                 riwayatAbsensi.innerHTML = "";
@@ -264,24 +279,24 @@
                         index + 1,
                         item.tanggal || "-",
                         item.nama || "-",
-                        item.kelas || "-",
-                        null
+                        item.kelas || "-"
                     ];
 
-                    for (let i = 0; i < 4; i++) {
+                    data.forEach((nilai) => {
                         const sel = document.createElement("td");
-                        sel.textContent = data[i];
+                        sel.textContent = nilai;
                         baris.appendChild(sel);
-                    }
+                    });
 
                     const selStatus = document.createElement("td");
                     selStatus.appendChild(
                         tampilkanStatus(item.status || "-")
                     );
-                    baris.appendChild(selStatus);
 
+                    baris.appendChild(selStatus);
                     riwayatAbsensi.appendChild(baris);
                 });
+
             } catch (error) {
                 console.error("Gagal memuat riwayat:", error);
 
@@ -310,9 +325,11 @@
                 btnAbsen.disabled = false;
             } catch (error) {
                 console.error("Gagal memuat data:", error);
+
                 tampilPesan(
                     "Gagal memuat data. Periksa koneksi atau aturan Firestore."
                 );
+
                 btnAbsen.disabled = false;
             }
         });
@@ -345,19 +362,9 @@
             btnAbsen.textContent = "Menyimpan...";
 
             try {
-                const idAbsensi = `${penggunaAktif.uid}_${tanggal}`;
-                const refAbsensi = doc(db, "absensi", idAbsensi);
+                const refKoleksi = collection(db, "absensi");
 
-                const snapshot = await getDoc(refAbsensi);
-
-                if (snapshot.exists()) {
-                    tampilPesan(
-                        "Absensi untuk tanggal tersebut sudah tersimpan."
-                    );
-                    return;
-                }
-
-                await setDoc(refAbsensi, {
+                await addDoc(refKoleksi, {
                     uid: penggunaAktif.uid,
                     nama: nama,
                     kelas: kelas,
@@ -372,6 +379,7 @@
                 inputTanggal.value = tanggalHariIni();
 
                 await muatRiwayat();
+
             } catch (error) {
                 console.error("Gagal menyimpan absensi:", error);
 
